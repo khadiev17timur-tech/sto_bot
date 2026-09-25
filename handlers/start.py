@@ -45,3 +45,12 @@ async def cb_back_to_menu(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(CalendarIgnore.filter())
 async def cb_calendar_ignore(callback: CallbackQuery) -> None:
     await callback.answer()
+
+
+@router.callback_query()
+async def cb_stale_button(callback: CallbackQuery, state: FSMContext) -> None:
+    """Запасной обработчик: кнопка устарела (например, после перезапуска бота)."""
+    await state.clear()
+    await callback.answer("Эта кнопка устарела, открываю меню 🙂")
+    is_admin = callback.from_user.id == ADMIN_ID
+    await callback.message.answer(welcome_text(), reply_markup=main_menu_kb(is_admin=is_admin))

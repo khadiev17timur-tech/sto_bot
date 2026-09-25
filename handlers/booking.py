@@ -22,6 +22,7 @@ from keyboards.booking import (
     ActiveBookingAction,
     CancelFSM,
     ConfirmAction,
+    LoweringCallback,
     ServiceCallback,
     SkipField,
     TimeCallback,
@@ -32,6 +33,7 @@ from keyboards.booking import (
     phone_request_kb,
     service_list_kb,
     skip_kb,
+    lowering_kb,
     time_slots_kb,
 )
 from keyboards.calendar import CalendarDay, CalendarNav, build_calendar
@@ -189,7 +191,8 @@ async def cb_choose_time(callback: CallbackQuery, callback_data: TimeCallback, s
     chosen_date = date.fromisoformat(data["date"])
 
     times = await get_available_start_times(chosen_date, duration_hours=1)
-    if callback_data.time not in times:
+    chosen_time = f"{callback_data.time[:2]}:{callback_data.time[2:]}"
+    if chosen_time not in times:
         await callback.answer("Это время уже заняли, выберите другое 🙁", show_alert=True)
         if times:
             await callback.message.edit_text(
@@ -201,7 +204,7 @@ async def cb_choose_time(callback: CallbackQuery, callback_data: TimeCallback, s
             await _render_calendar(callback, today.year, today.month)
         return
 
-    await state.update_data(time=callback_data.time)
+    await state.update_data(time=chosen_time)
     await state.set_state(BookingStates.select_service)
     await callback.message.edit_text("🔧 Выберите услугу:", reply_markup=service_list_kb())
     await callback.answer()
@@ -341,10 +344,28 @@ async def process_car_model(message: Message, state: FSMContext) -> None:
     await message.answer("🔢 Госномер (необязательно):", reply_markup=skip_kb("license_plate"))
 
 
-LICENSE_PLATE_PROMPT_NEXT = (
+COMMENT_PROMPT = (
     "Есть ли дополнительные комментарии по автомобилю?\n\n"
     "Например:\n«Слышен стук спереди»\n«Нужно подобрать запчасти»\n«Проблема проявляется только на холодную»"
 )
+COMMENT_PROMPT_ALIGNMENT = "Есть ли дополнительные пожелания или комментарии? (необязательно)"
+LOWERING_PROMPT = "📐 Какое у вас занижение машины?"
+LOWERING_LABELS = {"factory": "Заводское", "sport": "Спортивное"}
+
+
+async def _ask_after_license_plate(message: Message, state: FSMContext, edit: bool = False) -> None:
+    """После госномера: для развал-схождения спрашиваем про занижение, иначе — комментарий."""
+    data = await state.get_data()
+    if data.get("service_key") == "alignment":
+        await state.set_state(BookingStates.select_lowering)
+        text, kb = LOWERING_PROMPT, lowering_kb()
+    else:
+        await state.set_state(BookingStates.enter_comment)
+        text, kb = COMMENT_PROMPT, skip_kb("comment")
+    if edit:
+        await message.edit_text(text, reply_markup=kb)
+    else:
+        await message.answer(text, reply_markup=kb)
 
 
 @router.message(StateFilter(BookingStates.enter_license_plate))
@@ -354,16 +375,60 @@ async def process_license_plate(message: Message, state: FSMContext) -> None:
         await message.answer("Госномер выглядит некорректно. Попробуйте ещё раз или нажмите «Пропустить».")
         return
     await state.update_data(license_plate=text)
-    await state.set_state(BookingStates.enter_comment)
-    await message.answer(LICENSE_PLATE_PROMPT_NEXT, reply_markup=skip_kb("comment"))
+    await _ask_after_license_plate(message, state)
 
 
 @router.callback_query(SkipField.filter(F.field == "license_plate"), StateFilter(BookingStates.enter_license_plate))
 async def cb_skip_license_plate(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(license_plate=None)
-    await state.set_state(BookingStates.enter_comment)
-    await callback.message.edit_text(LICENSE_PLATE_PROMPT_NEXT, reply_markup=skip_kb("comment"))
+    await _ask_after_license_plate(callback.message, state, edit=True)
     await callback.answer()
+
+
+async def _ask_comment_after_lowering(message: Message, state: FSMContext, edit: bool) -> None:
+    await state.set_state(BookingStates.enter_comment)
+    if edit:
+        await message.edit_text(COMMENT_PROMPT_ALIGNMENT, reply_markup=skip_kb("comment"))
+    else:
+        await message.answer(COMMENT_PROMPT_ALIGNMENT, reply_markup=skip_kb("comment"))
+
+
+@router.callback_query(LoweringCallback.filter(), StateFilter(BookingStates.select_lowering))
+async def cb_choose_lowering(callback: CallbackQuery, callback_data: LoweringCallback, state: FSMContext) -> None:
+    if callback_data.kind == "other":
+        await state.set_state(BookingStates.enter_lowering_custom)
+        await callback.message.edit_text(
+            "Опишите, пожалуйста, какое у вас занижение (например, «койловеры», «пружины -30 мм»):",
+            reply_markup=cancel_fsm_kb(),
+        )
+        await callback.answer()
+        return
+    label = LOWERING_LABELS.get(callback_data.kind)
+    if label is None:
+        await callback.answer()
+        return
+    await state.update_data(lowering=label)
+    await _ask_comment_after_lowering(callback.message, state, edit=True)
+    await callback.answer()
+
+
+@router.message(StateFilter(BookingStates.enter_lowering_custom))
+async def process_lowering_custom(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+    if not is_valid_free_text(text, min_len=2, max_len=100):
+        await message.answer("Пожалуйста, опишите занижение текстом (от 2 до 100 символов).")
+        return
+    await state.update_data(lowering=text)
+    await _ask_comment_after_lowering(message, state, edit=False)
+
+
+def _final_comment(data: dict) -> str | None:
+    parts = []
+    if data.get("lowering"):
+        parts.append(f"Занижение: {data['lowering']}")
+    if data.get("comment"):
+        parts.append(data["comment"])
+    return "\n".join(parts) or None
 
 
 async def _show_confirmation(state: FSMContext) -> str:
@@ -378,7 +443,7 @@ async def _show_confirmation(state: FSMContext) -> str:
         car_model=data["car_model"],
         license_plate=data.get("license_plate"),
         service_name=_final_service_name(data),
-        comment=data.get("comment"),
+        comment=_final_comment(data),
     )
 
 
@@ -439,7 +504,7 @@ async def cb_confirm_booking(callback: CallbackQuery, state: FSMContext) -> None
             car_brand=data["car_brand"],
             car_model=data["car_model"],
             license_plate=data.get("license_plate"),
-            comment=data.get("comment"),
+            comment=_final_comment(data),
         )
     except BookingError as e:
         if e.code == "slot_taken":

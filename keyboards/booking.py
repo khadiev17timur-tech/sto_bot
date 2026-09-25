@@ -26,6 +26,10 @@ class TimeCallback(CallbackData, prefix="time"):
     time: str
 
 
+class LoweringCallback(CallbackData, prefix="lower"):
+    kind: str  # factory | sport | other
+
+
 class SkipField(CallbackData, prefix="skip"):
     field: str  # license_plate | comment
 
@@ -61,7 +65,7 @@ def time_slots_kb(times: list[str]) -> InlineKeyboardMarkup:
     rows = []
     row: list[InlineKeyboardButton] = []
     for t in times:
-        row.append(InlineKeyboardButton(text=t, callback_data=TimeCallback(time=t).pack()))
+        row.append(InlineKeyboardButton(text=t, callback_data=TimeCallback(time=t.replace(":", "")).pack()))
         if len(row) == 4:
             rows.append(row)
             row = []
@@ -86,6 +90,15 @@ def remove_reply_kb() -> ReplyKeyboardRemove:
 def skip_kb(field: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Пропустить", callback_data=SkipField(field=field).pack())],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data=CancelFSM().pack())],
+    ])
+
+
+def lowering_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Заводское", callback_data=LoweringCallback(kind="factory").pack())],
+        [InlineKeyboardButton(text="Спортивное", callback_data=LoweringCallback(kind="sport").pack())],
+        [InlineKeyboardButton(text="Другое", callback_data=LoweringCallback(kind="other").pack())],
         [InlineKeyboardButton(text="❌ Отмена", callback_data=CancelFSM().pack())],
     ])
 
