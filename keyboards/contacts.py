@@ -3,14 +3,12 @@
 конфигурацию" без правки логики бота."""
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from config import STO_PHONE, TELEGRAM_URL, WHATSAPP_URL
+from config import TELEGRAM_URL, WHATSAPP_URL
 from keyboards.main import MenuAction
 
 
 def contacts_kb() -> InlineKeyboardMarkup:
     rows = []
-    if STO_PHONE:
-        rows.append([InlineKeyboardButton(text="📞 Позвонить", url=f"tel:{STO_PHONE}")])
     if WHATSAPP_URL:
         rows.append([InlineKeyboardButton(text="💬 WhatsApp", url=WHATSAPP_URL)])
     if TELEGRAM_URL:

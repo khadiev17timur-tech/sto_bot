@@ -23,8 +23,9 @@ async def cb_about(callback: CallbackQuery) -> None:
 
 @router.callback_query(MenuAction.filter(F.action == "contacts"))
 async def cb_contacts(callback: CallbackQuery) -> None:
-    await callback.message.edit_text(
-        "📞 <b>Связаться с СТО</b>\n\nВыберите удобный способ связи:",
-        reply_markup=contacts_kb(),
-    )
+    text = "📞 <b>Связаться с СТО</b>\n\n"
+    if STO_PHONE:
+        text += f"Телефон: {STO_PHONE}\n(нажмите на номер, чтобы позвонить)\n\n"
+    text += "Или выберите удобный способ связи:"
+    await callback.message.edit_text(text, reply_markup=contacts_kb())
     await callback.answer()
