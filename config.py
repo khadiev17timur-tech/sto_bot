@@ -8,15 +8,18 @@ load_dotenv()
 
 # --- Основные параметры ---
 BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
-ADMIN_ID: int = int(os.getenv("ADMIN_ID", "0"))
+_admin_raw = os.getenv("ADMIN_ID", "").strip()
+if _admin_raw and not _admin_raw.lstrip("-").isdigit():
+    raise RuntimeError(f"ADMIN_ID должен быть числом (Telegram ID из @userinfobot), а не {_admin_raw!r}")
+ADMIN_ID: int = int(_admin_raw or "0")
 SCHEDULE_CHANNEL_ID: str = os.getenv("SCHEDULE_CHANNEL_ID", "")
 
 DB_PATH: str = os.getenv("DB_PATH", "data/sto_bot.db")
 
 if not BOT_TOKEN:
-    raise RuntimeError("Не задан BOT_TOKEN в .env файле")
+    raise RuntimeError("Не задан BOT_TOKEN (в .env или в переменных окружения хостинга)")
 if not ADMIN_ID:
-    raise RuntimeError("Не задан ADMIN_ID в .env файле")
+    raise RuntimeError("Не задан ADMIN_ID (в .env или в переменных окружения хостинга)")
 
 # --- Информация о СТО ---
 STO_NAME: str = os.getenv("STO_NAME", "Автосервис")
