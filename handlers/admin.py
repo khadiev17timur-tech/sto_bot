@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from config import ADMIN_ID
+from utils.timeutil import today as local_today
 from database import queries
 from keyboards.admin import (
     SCHEDULE_DATE_MODES,
@@ -58,7 +59,7 @@ MODE_TITLES = {
 
 
 def _admin_date_range() -> tuple[date, date]:
-    today = date.today()
+    today = local_today()
     return today, today + timedelta(days=ADMIN_DAYS_AHEAD)
 
 
@@ -130,7 +131,7 @@ async def cb_admin_pick_mode(callback: CallbackQuery, callback_data: AdminAction
     mode = callback_data.action
     await state.set_state(AdminStates.choose_date)
     await state.update_data(admin_mode=mode)
-    today = date.today()
+    today = local_today()
     await _render_admin_calendar(callback, today.year, today.month, mode)
     await callback.answer()
 
@@ -324,6 +325,10 @@ async def process_add_slot_time(message: Message, state: FSMContext) -> None:
     time_str = (message.text or "").strip()
     if not is_valid_time(time_str):
         await message.answer("Некорректный формат времени. Введите в формате ЧЧ:ММ, например 14:00")
+        return
+
+    if time_str >= "23:00":
+        await message.answer("Слот длится час и не должен заканчиваться после полуночи. Введите время до 22:59.")
         return
 
     data = await state.get_data()

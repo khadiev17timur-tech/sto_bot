@@ -7,7 +7,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
 )
 
 from config import SERVICES
@@ -76,15 +75,15 @@ def time_slots_kb(times: list[str]) -> InlineKeyboardMarkup:
 
 
 def phone_request_kb() -> ReplyKeyboardMarkup:
+    """Кнопка «отправить номер» + отмена: из шага телефона можно выйти, не вводя номер."""
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📞 Отправить номер телефона", request_contact=True)]],
+        keyboard=[
+            [KeyboardButton(text="📞 Отправить номер телефона", request_contact=True)],
+            [KeyboardButton(text="❌ Отмена")],
+        ],
         resize_keyboard=True,
-        one_time_keyboard=True,
+        input_field_placeholder="Или введите номер: +79991234567",
     )
-
-
-def remove_reply_kb() -> ReplyKeyboardRemove:
-    return ReplyKeyboardRemove()
 
 
 def skip_kb(field: str) -> InlineKeyboardMarkup:

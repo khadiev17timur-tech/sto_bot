@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import BotCommand
 
 from config import BOT_TOKEN
 from database.db import init_db
@@ -35,6 +36,10 @@ async def main() -> None:
     scheduler.start()
     await restore_reminders(bot)
 
+    await bot.set_my_commands([
+        BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="cancel", description="Отменить текущее действие"),
+    ])
     await bot.delete_webhook(drop_pending_updates=True)
 
     logger.info("Бот запущен")

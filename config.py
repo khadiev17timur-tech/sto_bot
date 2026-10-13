@@ -16,6 +16,12 @@ SCHEDULE_CHANNEL_ID: str = os.getenv("SCHEDULE_CHANNEL_ID", "")
 
 DB_PATH: str = os.getenv("DB_PATH", "data/sto_bot.db")
 
+# Часовой пояс СТО. Хостинг (Bothost) работает в UTC, поэтому «сегодня», «сейчас» и
+# напоминания считаем явно в поясе СТО, а не по часам сервера.
+TIMEZONE: str = os.getenv("TIMEZONE", "Europe/Moscow")
+# За сколько минут до начала ещё можно записаться на сегодняшний слот
+MIN_BOOKING_LEAD_MINUTES: int = int(os.getenv("MIN_BOOKING_LEAD_MINUTES", "60"))
+
 if not BOT_TOKEN:
     raise RuntimeError("Не задан BOT_TOKEN (в .env или в переменных окружения хостинга)")
 if not ADMIN_ID:

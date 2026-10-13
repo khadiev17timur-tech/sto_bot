@@ -10,8 +10,9 @@ from datetime import date as date_, timedelta
 
 from sqlalchemy import select
 
-from config import SCHEDULE_DAYS_AHEAD, WORKING_HOURS
+from config import MIN_BOOKING_LEAD_MINUTES, SCHEDULE_DAYS_AHEAD, WORKING_HOURS
 from database import queries
+from utils.timeutil import now as local_now, today as local_today
 from database.db import get_session
 from database.models import ScheduleSlot
 
@@ -70,7 +71,7 @@ async def generate_slots_for_date(target_date: date_) -> None:
 
 async def generate_schedule(days_ahead: int = SCHEDULE_DAYS_AHEAD) -> int:
     """Досоздаёт расписание на days_ahead дней вперёд. Возвращает число новых дней."""
-    today = date_.today()
+    today = local_today()
     existing_dates = await queries.get_existing_slot_dates()
     created = 0
 
@@ -86,9 +87,18 @@ async def generate_schedule(days_ahead: int = SCHEDULE_DAYS_AHEAD) -> int:
     return created
 
 
+def is_start_in_past(target_date: date_, start_time: str) -> bool:
+    """Слот уже начался или начнётся раньше, чем через MIN_BOOKING_LEAD_MINUTES (время СТО)."""
+    now = local_now()
+    if target_date != now.date():
+        return target_date < now.date()
+    return _to_minutes(start_time) < now.hour * 60 + now.minute + MIN_BOOKING_LEAD_MINUTES
+
+
 async def get_available_start_times(target_date: date_, duration_hours: int) -> list[str]:
     """Времена начала, с которых можно записаться на услугу такой длительности —
-    то есть подряд идут duration_hours свободных слотов без разрывов."""
+    то есть подряд идут duration_hours свободных слотов без разрывов.
+    Прошедшее (и слишком близкое) время сегодняшнего дня не предлагается."""
     slots = await queries.get_slots_for_date(target_date)
     if not slots:
         return []
@@ -109,4 +119,4 @@ async def get_available_start_times(target_date: date_, duration_hours: int) -> 
         if ok:
             available.append(t)
 
-    return available
+    return [t for t in available if not is_start_in_past(target_date, t)]

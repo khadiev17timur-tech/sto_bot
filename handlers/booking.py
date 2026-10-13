@@ -13,11 +13,12 @@ from datetime import date, timedelta
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, ReplyKeyboardRemove
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
 
 from config import ADMIN_ID, SCHEDULE_DAYS_AHEAD, SERVICES_BY_KEY
+from utils.timeutil import today as local_today
 from database import queries
-from handlers.start import welcome_text
+from handlers.common import go_home, respond
 from keyboards.booking import (
     ActiveBookingAction,
     CancelFSM,
@@ -37,7 +38,7 @@ from keyboards.booking import (
     time_slots_kb,
 )
 from keyboards.calendar import CalendarDay, CalendarNav, build_calendar
-from keyboards.main import MenuAction, back_to_menu_kb, main_menu_kb
+from keyboards.main import BTN_CANCEL, MenuAction, back_to_menu_kb, main_reply_kb
 from services.booking_service import BookingError, create_booking
 from services.notification_service import notify_admin_new_booking, notify_channel_new_booking
 from services.reminder_service import schedule_reminder
@@ -52,13 +53,15 @@ BOOK_MODE = "book_date"
 
 
 def _date_range() -> tuple[date, date]:
-    today = date.today()
+    today = local_today()
     return today, today + timedelta(days=SCHEDULE_DAYS_AHEAD - 1)
 
 
 async def _calendar_view(year: int, month: int, prefix: str = "") -> tuple[str, InlineKeyboardMarkup]:
     min_date, max_date = _date_range()
     dates = await queries.get_dates_with_available_slots(min_date, max_date)
+    if min_date in dates and not await get_available_start_times(min_date, duration_hours=1):
+        dates.discard(min_date)  # сегодня остались только прошедшие слоты
     highlighted = {d.isoformat() for d in dates}
     closed = {d.isoformat() for d in await queries.get_closed_dates(min_date, max_date)}
     kb = build_calendar(
@@ -89,12 +92,13 @@ async def _reject_slot_taken(callback: CallbackQuery, state: FSMContext, target_
         )
     else:
         await state.set_state(BookingStates.select_date)
-        today = date.today()
+        today = local_today()
         await _render_calendar(callback, today.year, today.month, prefix=reject_text + "\n\n")
 
 
-async def _start_booking(callback: CallbackQuery, state: FSMContext) -> None:
-    existing = await queries.get_active_booking_for_telegram_id(callback.from_user.id)
+async def start_booking(event: Message | CallbackQuery, state: FSMContext) -> None:
+    """Начало записи: из inline-кнопки (правим сообщение) или из постоянного меню (новое сообщение)."""
+    existing = await queries.get_active_booking_for_telegram_id(event.from_user.id)
     if existing is not None:
         text = (
             "📋 У вас уже есть активная запись:\n\n"
@@ -103,19 +107,19 @@ async def _start_booking(callback: CallbackQuery, state: FSMContext) -> None:
             f"🚗 {existing.car_brand} {existing.car_model}\n"
             f"🔧 {existing.service}"
         )
-        await callback.message.edit_text(text, reply_markup=active_booking_conflict_kb())
-        await callback.answer()
+        await respond(event, text, active_booking_conflict_kb())
         return
 
     await state.set_state(BookingStates.select_date)
-    today = date.today()
-    await _render_calendar(callback, today.year, today.month)
-    await callback.answer()
+    today = local_today()
+    text, kb = await _calendar_view(today.year, today.month)
+    await respond(event, text, kb)
 
 
 @router.callback_query(MenuAction.filter(F.action == "book"))
 async def cb_book(callback: CallbackQuery, state: FSMContext) -> None:
-    await _start_booking(callback, state)
+    await start_booking(callback, state)
+    await callback.answer()
 
 
 @router.callback_query(ActiveBookingAction.filter(F.action == "view"))
@@ -136,22 +140,14 @@ async def cb_active_cancel(callback: CallbackQuery) -> None:
 
 @router.callback_query(ActiveBookingAction.filter(F.action == "back"))
 async def cb_active_back(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.clear()
-    await callback.message.edit_text(welcome_text(), reply_markup=main_menu_kb(callback.from_user.id == ADMIN_ID))
+    await go_home(callback, state)
     await callback.answer()
 
 
 @router.callback_query(CancelFSM.filter())
 async def cb_cancel_fsm(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.clear()
-    await callback.message.edit_text(welcome_text(), reply_markup=main_menu_kb(callback.from_user.id == ADMIN_ID))
-    await callback.answer("Отменено")
-
-
-async def _cancel_fsm_via_message(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome_text(), reply_markup=main_menu_kb(message.from_user.id == ADMIN_ID))
+    await go_home(callback, state, prefix="Отменено.\n\n")
+    await callback.answer()
 
 
 # --- Дата ---------------------------------------------------------------------
@@ -200,7 +196,7 @@ async def cb_choose_time(callback: CallbackQuery, callback_data: TimeCallback, s
             )
         else:
             await state.set_state(BookingStates.select_date)
-            today = date.today()
+            today = local_today()
             await _render_calendar(callback, today.year, today.month)
         return
 
@@ -262,7 +258,7 @@ async def process_service_description(message: Message, state: FSMContext) -> No
             await message.answer(f"{reject_text}\n\n📅 {format_date_human(chosen_date)}", reply_markup=time_slots_kb(times))
         else:
             await state.set_state(BookingStates.select_date)
-            today = date.today()
+            today = local_today()
             view_text, kb = await _calendar_view(today.year, today.month, prefix=reject_text + "\n\n")
             await message.answer(view_text, reply_markup=kb)
         return
@@ -299,7 +295,7 @@ async def process_name(message: Message, state: FSMContext) -> None:
 async def _save_phone_and_continue(message: Message, state: FSMContext, phone: str) -> None:
     await state.update_data(phone=phone)
     await state.set_state(BookingStates.enter_car_brand)
-    await message.answer("Телефон принят ✅", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Телефон принят ✅", reply_markup=main_reply_kb(message.from_user.id == ADMIN_ID))
     await message.answer("🚗 Укажите марку автомобиля.", reply_markup=cancel_fsm_kb())
 
 
@@ -313,9 +309,6 @@ async def process_phone(message: Message, state: FSMContext) -> None:
         return
 
     text = (message.text or "").strip()
-    if text == "❌ Отмена":
-        await _cancel_fsm_via_message(message, state)
-        return
     if not is_valid_phone(text):
         await message.answer("Некорректный номер телефона. Пример: +79991234567")
         return
@@ -471,16 +464,15 @@ async def cb_skip_comment(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(ConfirmAction.filter(F.action == "cancel"), StateFilter(BookingStates.confirmation))
 async def cb_confirm_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text(
-        "Запись отменена.", reply_markup=main_menu_kb(callback.from_user.id == ADMIN_ID)
-    )
+    await callback.message.edit_text("Запись отменена.", reply_markup=back_to_menu_kb())
     await callback.answer()
 
 
 @router.callback_query(ConfirmAction.filter(F.action == "edit"), StateFilter(BookingStates.confirmation))
 async def cb_confirm_edit(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await _start_booking(callback, state)
+    await start_booking(callback, state)
+    await callback.answer()
 
 
 @router.callback_query(ConfirmAction.filter(F.action == "confirm"), StateFilter(BookingStates.confirmation))
@@ -534,7 +526,7 @@ async def cb_confirm_booking(callback: CallbackQuery, state: FSMContext) -> None
     await callback.message.edit_text(
         f"✅ Запись создана!\n\n📅 {format_date_human(chosen_date)} в {data['time']}\n\n"
         "Ждём вас! Отменить запись можно в разделе «Моя запись».",
-        reply_markup=main_menu_kb(user.id == ADMIN_ID),
+        reply_markup=back_to_menu_kb(),
     )
     await callback.answer()
 

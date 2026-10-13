@@ -20,12 +20,12 @@ def normalize_phone(phone: str) -> str:
 
 def is_valid_name(name: str) -> bool:
     name = name.strip()
-    return 2 <= len(name) <= 50 and not name.isdigit()
+    return 2 <= len(name) <= 50 and not name.isdigit() and not name.startswith("/")
 
 
 def is_valid_free_text(value: str, min_len: int = 1, max_len: int = 100) -> bool:
     value = value.strip()
-    return min_len <= len(value) <= max_len
+    return min_len <= len(value) <= max_len and not value.startswith("/")
 
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")

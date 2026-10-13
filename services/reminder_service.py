@@ -8,12 +8,13 @@ from aiogram import Bot
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import REMINDER_HOURS_BEFORE
+from utils.timeutil import TZ, now as local_now
 from database import queries
 from utils.formatters import format_date_human
 
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+scheduler = AsyncIOScheduler(timezone=TZ)
 
 
 def _job_id(booking_id: int) -> str:
@@ -55,7 +56,7 @@ async def schedule_reminder(bot: Bot, booking_id: int, date_, start_time: str) -
     appointment_dt = _booking_datetime(date_, start_time)
     remind_at = appointment_dt - timedelta(hours=REMINDER_HOURS_BEFORE)
 
-    if remind_at <= datetime.now():
+    if remind_at <= local_now():
         return
 
     job_id = _job_id(booking_id)
@@ -82,7 +83,7 @@ async def cancel_reminder(booking_id: int) -> None:
 async def restore_reminders(bot: Bot) -> None:
     """Восстанавливает задачи APScheduler из БД после перезапуска бота, не создавая дублей."""
     pending = await queries.get_pending_reminders()
-    now = datetime.now()
+    now = local_now()
     restored = 0
 
     for reminder in pending:

@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message
 
 from database.models import Booking
+from handlers.common import respond
 from database.queries import get_active_booking_for_telegram_id
 from keyboards.booking import MyBookingCancel, my_booking_cancel_confirm_kb, my_booking_kb
 from keyboards.main import MenuAction, back_to_menu_kb
@@ -42,12 +43,12 @@ def _format_booking_details(booking: Booking) -> str:
     return "\n".join(lines)
 
 
-async def render_my_booking(callback: CallbackQuery) -> None:
-    booking = await get_active_booking_for_telegram_id(callback.from_user.id)
+async def render_my_booking(event: Message | CallbackQuery) -> None:
+    booking = await get_active_booking_for_telegram_id(event.from_user.id)
     if booking is None:
-        await callback.message.edit_text("У вас пока нет активных записей.", reply_markup=back_to_menu_kb())
+        await respond(event, "У вас пока нет активных записей.", back_to_menu_kb())
         return
-    await callback.message.edit_text(_format_booking_details(booking), reply_markup=my_booking_kb())
+    await respond(event, _format_booking_details(booking), my_booking_kb())
 
 
 @router.callback_query(MenuAction.filter(F.action == "my_booking"))
