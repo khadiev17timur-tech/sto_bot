@@ -10,7 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from config import REMINDER_HOURS_BEFORE
 from utils.timeutil import TZ, now as local_now
 from database import queries
-from utils.formatters import format_date_human
+from utils.formatters import esc, format_date_human
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +32,15 @@ async def _send_reminder(bot: Bot, booking_id: int) -> None:
         await queries.delete_reminder(booking_id)
         return
 
+    days_left = (booking.date - local_now().date()).days
+    when = {0: "Сегодня", 1: "Завтра"}.get(days_left, "Скоро")
     text = (
         "🔔 <b>Напоминание о записи</b>\n\n"
-        "Завтра вы записаны на СТО:\n\n"
+        f"{when} вы записаны на СТО:\n\n"
         f"📅 {format_date_human(booking.date)}\n"
         f"🕐 {booking.start_time}\n\n"
-        f"🚗 {booking.car_brand} {booking.car_model}\n"
-        f"🔧 {booking.service}\n\n"
+        f"🚗 {esc(booking.car_brand)} {esc(booking.car_model)}\n"
+        f"🔧 {esc(booking.service)}\n\n"
         "Ждём вас!"
     )
     try:

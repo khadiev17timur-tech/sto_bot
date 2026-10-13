@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from database.db import get_session
 from database.models import Booking, BookingSlot, ScheduleSlot, User
-from database.queries import get_or_create_user, is_day_closed
+from database.queries import complete_past_bookings, get_or_create_user, is_day_closed
 from services.schedule_service import add_hour, is_start_in_past
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ async def create_booking(
     if is_start_in_past(target_date, start_time):
         raise BookingError("slot_taken")
 
+    await complete_past_bookings()
     user = await get_or_create_user(telegram_id, username, first_name)
 
     required_times = []

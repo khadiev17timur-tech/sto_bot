@@ -214,7 +214,7 @@ async def test_today_not_highlighted_when_only_past_slots_left(h, monkeypatch):
 def test_timeutil_uses_sto_timezone():
     from zoneinfo import ZoneInfo
     from utils.timeutil import now
-    expected = datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
+    expected = datetime.now(ZoneInfo("Asia/Yekaterinburg")).replace(tzinfo=None)
     assert abs((now() - expected).total_seconds()) < 5
 
 
@@ -243,7 +243,7 @@ async def _book_until_phone(h, uid):
 
 
 async def test_reminder_is_scheduled_in_sto_timezone(h, monkeypatch):
-    """Сервер в UTC, СТО в Москве: напоминание считается от московского «сейчас», а не от часов сервера."""
+    """Сервер в UTC, СТО в Екатеринбурге: напоминание считается от местного «сейчас», а не от часов сервера."""
     from services import reminder_service
     monkeypatch.setattr(reminder_service, "local_now", _FrozenNow(datetime(2030, 1, 1, 8, 0)))
 
@@ -254,7 +254,7 @@ async def test_reminder_is_scheduled_in_sto_timezone(h, monkeypatch):
     job = reminder_service.scheduler.get_job("reminder_987654")
     assert job is not None
     assert job.trigger.run_date.replace(tzinfo=None) == datetime(2030, 1, 1, 10, 0)
-    assert str(job.trigger.run_date.tzinfo) == "Europe/Moscow"
+    assert str(job.trigger.run_date.tzinfo) == "Asia/Yekaterinburg"
     # визит ровно через 24 часа или раньше — напоминать уже поздно
     await reminder_service.schedule_reminder(h.bot, 987655, date(2030, 1, 2), "08:00")
     assert reminder_service.scheduler.get_job("reminder_987655") is None
@@ -299,3 +299,70 @@ async def test_admin_calendar_has_back_button(h):
     assert "⬅️ Назад" in labels
     await h.click(ADMIN, "Назад")
     assert "Админ-панель" in h.last_text(ADMIN)
+
+
+# ---------- ревизия: прошедшие записи, продление расписания, HTML ----------
+
+async def _make_booking(uid: int, d, start="10:00", name="Иван", comment=None):
+    return await create_booking(
+        telegram_id=uid, username="u", first_name="И", target_date=d, start_time=start,
+        service_key="oil_change", service_name="Замена масла", duration_hours=1, name=name,
+        phone="+79991234567", car_brand="A", car_model="B", license_plate=None, comment=comment,
+    )
+
+
+async def test_past_booking_stops_blocking_new_booking(h, monkeypatch):
+    """Раньше запись оставалась active навсегда: клиент после визита больше не мог записаться."""
+    tomorrow = today() + timedelta(days=1)
+    await _make_booking(CLIENT, tomorrow)
+    assert await queries.get_active_booking_for_telegram_id(CLIENT) is not None
+    # «наступило» послезавтра
+    from database import queries as q
+    monkeypatch.setattr(q, "local_now", _FrozenNow(datetime.combine(tomorrow + timedelta(days=1), datetime.min.time())))
+    assert await queries.get_active_booking_for_telegram_id(CLIENT) is None
+    await _make_booking(CLIENT, tomorrow + timedelta(days=3))      # новая запись теперь возможна
+
+
+async def test_booking_done_after_its_end_time_same_day(h, monkeypatch):
+    from database import queries as q
+    d = today() + timedelta(days=1)
+    await _make_booking(CLIENT, d, start="10:00")
+    monkeypatch.setattr(q, "local_now", _FrozenNow(datetime.combine(d, datetime.min.time()).replace(hour=10, minute=30)))
+    assert await queries.get_active_booking_for_telegram_id(CLIENT) is not None   # визит ещё идёт
+    monkeypatch.setattr(q, "local_now", _FrozenNow(datetime.combine(d, datetime.min.time()).replace(hour=11, minute=0)))
+    assert await queries.get_active_booking_for_telegram_id(CLIENT) is None
+
+
+async def test_schedule_extends_over_time(h, monkeypatch):
+    """Расписание продлевается: через месяц работы бота новые даты должны появляться."""
+    far = today() + timedelta(days=40)
+    assert not await queries.has_slots_for_date(far)
+    monkeypatch.setattr(schedule_service, "local_today", lambda: today() + timedelta(days=20))
+    await schedule_service.generate_schedule()
+    assert await queries.has_slots_for_date(far)
+
+
+async def test_html_in_client_text_is_escaped_in_every_message(h):
+    evil = "<b>Иван & <i>Ко"
+    d = today() + timedelta(days=1)
+    booking = await _make_booking(CLIENT, d, name=evil, comment="a < b & c")
+    from services.notification_service import notify_admin_new_booking
+    await notify_admin_new_booking(h.bot, booking)
+    text = h.last_text(ADMIN)
+    assert "&lt;b&gt;Иван &amp; &lt;i&gt;Ко" in text and "a &lt; b &amp; c" in text
+    await h.send(CLIENT, BTN_MY_BOOKING)
+    assert "&lt;b&gt;Иван" in h.last_text(CLIENT)
+    from utils.formatters import format_booking_summary
+    summary = format_booking_summary(date_str="1", start_time="1", name=evil, phone="1", car_brand="<x>",
+                                     car_model="y", license_plate=None, service_name="s", comment=None)
+    assert "<b>Иван" not in summary and "&lt;x&gt;" in summary
+
+
+async def test_admin_schedule_shows_finished_visit(h, monkeypatch):
+    from database import queries as q
+    d = today() + timedelta(days=1)
+    await _make_booking(CLIENT, d, start="10:00", name="Петров")
+    monkeypatch.setattr(q, "local_now", _FrozenNow(datetime.combine(d, datetime.min.time()).replace(hour=23)))
+    await q.complete_past_bookings()
+    bookings = await q.get_bookings_for_date(d, include_done=True)
+    assert [b.name for b in bookings] == ["Петров"]

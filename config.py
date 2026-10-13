@@ -18,7 +18,7 @@ DB_PATH: str = os.getenv("DB_PATH", "data/sto_bot.db")
 
 # Часовой пояс СТО. Хостинг (Bothost) работает в UTC, поэтому «сегодня», «сейчас» и
 # напоминания считаем явно в поясе СТО, а не по часам сервера.
-TIMEZONE: str = os.getenv("TIMEZONE", "Europe/Moscow")
+TIMEZONE: str = os.getenv("TIMEZONE", "Asia/Yekaterinburg")
 # За сколько минут до начала ещё можно записаться на сегодняшний слот
 MIN_BOOKING_LEAD_MINUTES: int = int(os.getenv("MIN_BOOKING_LEAD_MINUTES", "60"))
 
@@ -60,7 +60,7 @@ SCHEDULE_DAYS_AHEAD: int = 30
 # За сколько часов до визита присылать напоминание
 REMINDER_HOURS_BEFORE: int = 24
 
-# --- Услуги и ориентировочные цены (Москва) ---
+# --- Услуги и ориентировочные цены ---
 # Единственное место, где меняются услуги, их длительность и цена.
 # price_from = None означает "цена по договорённости" (актуально для "Другое").
 # Длительность указана в часах и определяет, сколько последовательных часовых
@@ -87,7 +87,7 @@ PRICE_DISCLAIMER: str = (
 
 
 def build_price_list_html() -> str:
-    lines = ["<b>🔧 УСЛУГИ И ЦЕНЫ</b>", "", "<i>Ориентировочная стоимость работ (Москва)</i>", ""]
+    lines = ["<b>🔧 УСЛУГИ И ЦЕНЫ</b>", "", "<i>Ориентировочная стоимость работ</i>", ""]
     for s in SERVICES:
         if s["key"] == "other":
             continue

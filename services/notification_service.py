@@ -8,7 +8,7 @@ from aiogram import Bot
 
 from config import ADMIN_ID, SCHEDULE_CHANNEL_ID
 from database.models import Booking
-from utils.formatters import format_date_human
+from utils.formatters import esc, format_date_human
 
 logger = logging.getLogger(__name__)
 
@@ -17,18 +17,18 @@ def _booking_block(booking: Booking) -> str:
     lines = [
         f"{format_date_human(booking.date)} | {booking.start_time}",
         "",
-        f"👤 {booking.name}",
-        f"📞 {booking.phone}",
+        f"👤 {esc(booking.name)}",
+        f"📞 {esc(booking.phone)}",
         "",
-        f"🚗 {booking.car_brand} {booking.car_model}",
+        f"🚗 {esc(booking.car_brand)} {esc(booking.car_model)}",
     ]
     if booking.license_plate:
-        lines.append(f"🔢 {booking.license_plate}")
+        lines.append(f"🔢 {esc(booking.license_plate)}")
     lines.append("")
-    lines.append(f"🔧 {booking.service}")
+    lines.append(f"🔧 {esc(booking.service)}")
     if booking.comment:
         lines.append("")
-        lines.append(f"💬 {booking.comment}")
+        lines.append(f"💬 {esc(booking.comment)}")
     return "\n".join(lines)
 
 
@@ -69,9 +69,9 @@ async def notify_channel_cancelled_booking(bot: Bot, booking: Booking) -> None:
     text = (
         "❌ <b>ЗАПИСЬ ОТМЕНЕНА</b>\n\n"
         f"{format_date_human(booking.date)} | {booking.start_time}\n\n"
-        f"👤 {booking.name}\n"
-        f"🚗 {booking.car_brand} {booking.car_model}\n\n"
-        f"🔧 {booking.service}\n\n"
+        f"👤 {esc(booking.name)}\n"
+        f"🚗 {esc(booking.car_brand)} {esc(booking.car_model)}\n\n"
+        f"🔧 {esc(booking.service)}\n\n"
         "Слот снова свободен."
     )
     try:

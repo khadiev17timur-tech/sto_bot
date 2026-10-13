@@ -37,7 +37,7 @@ from services.notification_service import (
 from services.reminder_service import cancel_reminder
 from services.schedule_service import add_hour, generate_slots_for_date
 from states.admin import AdminStates
-from utils.formatters import format_date_human
+from utils.formatters import esc, format_date_human
 from utils.validators import is_valid_time
 
 router = Router(name="admin")
@@ -228,7 +228,7 @@ async def cb_admin_calendar_day(callback: CallbackQuery, callback_data: Calendar
 async def _show_schedule(callback: CallbackQuery, chosen_date: date) -> None:
     slots = await queries.get_slots_for_date(chosen_date)
     is_closed = await queries.is_day_closed(chosen_date)
-    bookings = await queries.get_bookings_for_date(chosen_date, status="active")
+    bookings = await queries.get_bookings_for_date(chosen_date, status="active", include_done=True)
 
     header = f"📅 <b>Расписание на {format_date_human(chosen_date)}</b>" + (" 🔒 (день закрыт)" if is_closed else "")
 
@@ -254,9 +254,9 @@ async def _show_schedule(callback: CallbackQuery, chosen_date: date) -> None:
         if booking is None:
             lines.append(f"⚫️ {slot.start_time} Недоступно")
         elif booking.start_time == slot.start_time:
-            lines.append(f"🔴 {slot.start_time} — {booking.name} — {booking.car_brand} {booking.car_model} ({booking.service})")
+            lines.append(f"🔴 {slot.start_time} — {esc(booking.name)} — {esc(booking.car_brand)} {esc(booking.car_model)} ({esc(booking.service)})")
         else:
-            lines.append(f"🔴 {slot.start_time} — (продолжение записи: {booking.name})")
+            lines.append(f"🔴 {slot.start_time} — (продолжение записи: {esc(booking.name)})")
 
     await callback.message.edit_text("\n".join(lines), reply_markup=admin_back_kb())
 
@@ -371,7 +371,7 @@ async def cb_admin_pick_booking(callback: CallbackQuery, callback_data: AdminBoo
     await state.update_data(booking_id=callback_data.booking_id)
     await state.set_state(AdminStates.cancel_booking_confirm)
     await callback.message.edit_text(
-        f"Отменить запись <b>{booking.name}</b> на {format_date_human(booking.date)} в {booking.start_time}?",
+        f"Отменить запись <b>{esc(booking.name)}</b> на {format_date_human(booking.date)} в {booking.start_time}?",
         reply_markup=admin_confirm_kb(),
     )
     await callback.answer()

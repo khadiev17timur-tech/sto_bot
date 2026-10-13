@@ -2,6 +2,12 @@
 from __future__ import annotations
 
 from datetime import date as date_
+from html import escape as _escape
+
+
+def esc(value: object) -> str:
+    """Текст клиента нельзя вставлять в HTML-сообщение как есть: «<» или «&» ломают разбор Telegram."""
+    return _escape(str(value), quote=False)
 
 MONTHS_RU_GENITIVE = [
     "", "января", "февраля", "марта", "апреля", "мая", "июня",
@@ -39,16 +45,16 @@ def format_booking_summary(
         f"📅 Дата: {date_str}",
         f"🕐 Время: {start_time}",
         "",
-        f"👤 Клиент: {name}",
-        f"📞 Телефон: {phone}",
+        f"👤 Клиент: {esc(name)}",
+        f"📞 Телефон: {esc(phone)}",
         "",
-        f"🚗 Автомобиль: {car_brand} {car_model}",
+        f"🚗 Автомобиль: {esc(car_brand)} {esc(car_model)}",
     ]
     if license_plate:
-        lines.append(f"🔢 Госномер: {license_plate}")
+        lines.append(f"🔢 Госномер: {esc(license_plate)}")
     lines.append("")
-    lines.append(f"🔧 Работа: {service_name}")
+    lines.append(f"🔧 Работа: {esc(service_name)}")
     if comment:
         lines.append("")
-        lines.append(f"💬 Комментарий:\n{comment}")
+        lines.append(f"💬 Комментарий:\n{esc(comment)}")
     return "\n".join(lines)

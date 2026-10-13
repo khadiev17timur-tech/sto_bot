@@ -15,6 +15,7 @@ os.environ.update(
     ADMIN_ID="900",
     DB_PATH=str(Path(_TMP) / "test.db"),
     STO_NAME="Тест-СТО",
+    TIMEZONE="Asia/Yekaterinburg",
     STO_PHONE="+79990000000",
     SCHEDULE_CHANNEL_ID="",
 )

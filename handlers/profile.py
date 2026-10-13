@@ -14,7 +14,7 @@ from keyboards.main import MenuAction, back_to_menu_kb
 from services.booking_service import BookingError, cancel_booking
 from services.notification_service import notify_admin_cancelled_booking, notify_channel_cancelled_booking
 from services.reminder_service import cancel_reminder
-from utils.formatters import format_date_human
+from utils.formatters import esc, format_date_human
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +28,18 @@ def _format_booking_details(booking: Booking) -> str:
         f"📅 Дата: {format_date_human(booking.date)}",
         f"🕐 Время: {booking.start_time}",
         "",
-        f"👤 Имя: {booking.name}",
-        f"📞 Телефон: {booking.phone}",
+        f"👤 Имя: {esc(booking.name)}",
+        f"📞 Телефон: {esc(booking.phone)}",
         "",
-        f"🚗 Автомобиль: {booking.car_brand} {booking.car_model}",
+        f"🚗 Автомобиль: {esc(booking.car_brand)} {esc(booking.car_model)}",
     ]
     if booking.license_plate:
-        lines.append(f"🔢 Госномер: {booking.license_plate}")
+        lines.append(f"🔢 Госномер: {esc(booking.license_plate)}")
     lines.append("")
-    lines.append(f"🔧 Услуга: {booking.service}")
+    lines.append(f"🔧 Услуга: {esc(booking.service)}")
     if booking.comment:
         lines.append("")
-        lines.append(f"💬 Комментарий:\n{booking.comment}")
+        lines.append(f"💬 Комментарий:\n{esc(booking.comment)}")
     return "\n".join(lines)
 
 

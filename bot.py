@@ -11,6 +11,7 @@ from aiogram.types import BotCommand
 from config import BOT_TOKEN
 from database.db import init_db
 from handlers import register_all_handlers
+from database import queries
 from services.reminder_service import restore_reminders, scheduler
 from services.schedule_service import generate_schedule
 
@@ -34,6 +35,11 @@ async def main() -> None:
     logger.info("Автогенерация расписания: добавлено дней — %s", created_days)
 
     scheduler.start()
+    # Расписание нужно продлевать каждую ночь, иначе через 30 дней непрерывной работы
+    # бота новые даты перестанут появляться; прошедшие записи закрываем регулярно.
+    scheduler.add_job(generate_schedule, trigger="cron", hour=0, minute=5, id="refresh_schedule", replace_existing=True)
+    scheduler.add_job(queries.complete_past_bookings, trigger="interval", minutes=15, id="complete_past", replace_existing=True)
+    await queries.complete_past_bookings()
     await restore_reminders(bot)
 
     await bot.set_my_commands([

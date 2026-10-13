@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from datetime import date as date_
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import selectinload
 
 from database.db import get_session
 from database.models import Booking, BookingSlot, Reminder, ScheduleSlot, User, WorkDay
+from utils.timeutil import now as local_now
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +154,27 @@ async def get_dates_with_available_slots(start: date_, end: date_) -> set[date_]
 # Записи
 # ---------------------------------------------------------------------------
 
+async def complete_past_bookings() -> int:
+    """Записи, время которых уже прошло, переводим из active в done.
+    Иначе клиент после визита навсегда остаётся «с активной записью» и не может записаться снова
+    (на уровне БД разрешена только одна active-запись на пользователя)."""
+    now = local_now()
+    now_hm = now.strftime("%H:%M")
+    async with get_session() as session:
+        result = await session.execute(
+            update(Booking)
+            .where(
+                Booking.status == "active",
+                (Booking.date < now.date()) | ((Booking.date == now.date()) & (Booking.end_time <= now_hm)),
+            )
+            .values(status="done")
+        )
+        await session.commit()
+        return result.rowcount or 0
+
+
 async def get_active_booking_for_telegram_id(telegram_id: int) -> Booking | None:
+    await complete_past_bookings()
     async with get_session() as session:
         result = await session.execute(
             select(Booking)
@@ -174,11 +195,12 @@ async def get_booking(booking_id: int) -> Booking | None:
         return result.scalar_one_or_none()
 
 
-async def get_bookings_for_date(target_date: date_, status: str = "active") -> list[Booking]:
+async def get_bookings_for_date(target_date: date_, status: str = "active", include_done: bool = False) -> list[Booking]:
+    statuses = [status, "done"] if include_done else [status]
     async with get_session() as session:
         result = await session.execute(
             select(Booking)
-            .where(Booking.date == target_date, Booking.status == status)
+            .where(Booking.date == target_date, Booking.status.in_(statuses))
             .order_by(Booking.start_time)
         )
         return list(result.scalars().all())
