@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config import ADMIN_ID, SCHEDULE_DAYS_AHEAD, SERVICES_BY_KEY
 from utils.timeutil import today as local_today
@@ -21,6 +21,7 @@ from database import queries
 from handlers.common import go_home, respond
 from keyboards.booking import (
     ActiveBookingAction,
+    BackStep,
     CancelFSM,
     ConfirmAction,
     LoweringCallback,
@@ -37,6 +38,8 @@ from keyboards.booking import (
     lowering_kb,
     time_slots_kb,
 )
+
+
 from keyboards.calendar import CalendarDay, CalendarNav, build_calendar
 from keyboards.main import BTN_CANCEL, MenuAction, back_to_menu_kb, main_reply_kb
 from services.booking_service import BookingError, create_booking
@@ -67,6 +70,7 @@ async def _calendar_view(year: int, month: int, prefix: str = "") -> tuple[str, 
     kb = build_calendar(
         year, month, mode=BOOK_MODE, min_date=min_date, max_date=max_date,
         highlighted_dates=highlighted, closed_dates=closed, only_highlighted_clickable=True,
+        back_button=InlineKeyboardButton(text="⬅️ Назад", callback_data=MenuAction(action="back").pack()),
     )
     text = prefix + "📅 Выберите дату записи (отмечены дни со свободным временем):"
     return text, kb
@@ -181,6 +185,14 @@ async def cb_calendar_day(callback: CallbackQuery, callback_data: CalendarDay, s
 
 # --- Время --------------------------------------------------------------------
 
+@router.callback_query(BackStep.filter(F.to == "date"), StateFilter(BookingStates.select_time))
+async def cb_back_to_date(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(BookingStates.select_date)
+    today = local_today()
+    await _render_calendar(callback, today.year, today.month)
+    await callback.answer()
+
+
 @router.callback_query(TimeCallback.filter(), StateFilter(BookingStates.select_time))
 async def cb_choose_time(callback: CallbackQuery, callback_data: TimeCallback, state: FSMContext) -> None:
     data = await state.get_data()
@@ -207,6 +219,24 @@ async def cb_choose_time(callback: CallbackQuery, callback_data: TimeCallback, s
 
 
 # --- Услуга ---------------------------------------------------------------------
+
+@router.callback_query(BackStep.filter(F.to == "time"), StateFilter(BookingStates.select_service))
+async def cb_back_to_time(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    chosen_date = date.fromisoformat(data["date"])
+    times = await get_available_start_times(chosen_date, duration_hours=1)
+    if not times:  # пока клиент выбирал услугу, время на этот день разобрали
+        await state.set_state(BookingStates.select_date)
+        today = local_today()
+        await _render_calendar(callback, today.year, today.month)
+        await callback.answer("На эту дату уже не осталось времени 🙁", show_alert=True)
+        return
+    await state.set_state(BookingStates.select_time)
+    await callback.message.edit_text(
+        f"📅 {format_date_human(chosen_date)}\n\nВыберите удобное время:", reply_markup=time_slots_kb(times)
+    )
+    await callback.answer()
+
 
 @router.callback_query(ServiceCallback.filter(), StateFilter(BookingStates.select_service))
 async def cb_choose_service(callback: CallbackQuery, callback_data: ServiceCallback, state: FSMContext) -> None:

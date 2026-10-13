@@ -40,6 +40,7 @@ def build_calendar(
     highlighted_dates: set[str] | None = None,
     closed_dates: set[str] | None = None,
     only_highlighted_clickable: bool = True,
+    back_button: InlineKeyboardButton | None = None,
 ) -> InlineKeyboardMarkup:
     """Строит календарь на месяц (year, month).
 
@@ -113,5 +114,7 @@ def build_calendar(
         nav_row.append(InlineKeyboardButton(text=" ", callback_data=CalendarIgnore().pack()))
 
     rows.append(nav_row)
+    if back_button is not None:
+        rows.append([back_button])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)

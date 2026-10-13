@@ -17,6 +17,17 @@ class CancelFSM(CallbackData, prefix="cancelfsm"):
     pass
 
 
+class BackStep(CallbackData, prefix="bstep"):
+    to: str  # date | time
+
+
+def _back_cancel_row(to: str) -> list[InlineKeyboardButton]:
+    return [
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=BackStep(to=to).pack()),
+        InlineKeyboardButton(text="❌ Отмена", callback_data=CancelFSM().pack()),
+    ]
+
+
 class ServiceCallback(CallbackData, prefix="svc"):
     key: str
 
@@ -56,7 +67,7 @@ def service_list_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=f"{s['emoji']} {s['name']}", callback_data=ServiceCallback(key=s["key"]).pack())]
         for s in SERVICES
     ]
-    rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data=CancelFSM().pack())])
+    rows.append(_back_cancel_row("time"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -70,7 +81,7 @@ def time_slots_kb(times: list[str]) -> InlineKeyboardMarkup:
             row = []
     if row:
         rows.append(row)
-    rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data=CancelFSM().pack())])
+    rows.append(_back_cancel_row("date"))
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message
 
 from config import ADMIN_ID
 from utils.timeutil import today as local_today
@@ -92,7 +92,8 @@ async def _calendar_kwargs(mode: str) -> dict:
 async def _render_admin_calendar(callback: CallbackQuery, year: int, month: int, mode: str) -> None:
     min_date, max_date = _admin_date_range()
     kwargs = await _calendar_kwargs(mode)
-    kb = build_calendar(year, month, mode=mode, min_date=min_date, max_date=max_date, **kwargs)
+    back = InlineKeyboardButton(text="⬅️ Назад", callback_data=AdminAction(action="back").pack())
+    kb = build_calendar(year, month, mode=mode, min_date=min_date, max_date=max_date, back_button=back, **kwargs)
     await callback.message.edit_text(MODE_TITLES[mode], reply_markup=kb)
 
 

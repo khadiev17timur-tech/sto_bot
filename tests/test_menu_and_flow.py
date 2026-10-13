@@ -258,3 +258,44 @@ async def test_reminder_is_scheduled_in_sto_timezone(h, monkeypatch):
     # визит ровно через 24 часа или раньше — напоминать уже поздно
     await reminder_service.schedule_reminder(h.bot, 987655, date(2030, 1, 2), "08:00")
     assert reminder_service.scheduler.get_job("reminder_987655") is None
+
+
+# ---------- кнопки «Назад» ----------
+
+async def test_calendar_has_back_button_that_returns_home(h):
+    await h.send(CLIENT, BTN_BOOK)
+    labels = [b.text for b in h.inline_buttons(h.last(CLIENT))]
+    assert "⬅️ Назад" in labels
+    await h.click(CLIENT, "Назад")
+    assert "Добро пожаловать" in h.last_text(CLIENT)
+    assert h.reply_kb_texts(CLIENT)[0] == BTN_BOOK
+
+
+async def test_back_from_time_returns_to_calendar_and_from_service_to_time(h):
+    await h.send(CLIENT, BTN_BOOK)
+    tomorrow = (today() + timedelta(days=1)).isoformat()
+    days = [b for b in h.inline_buttons(h.last(CLIENT)) if b.callback_data and b.callback_data.startswith("calday")]
+    pick = next((b for b in days if CalendarDay.unpack(b.callback_data).date == tomorrow), days[-1])
+    await h.press(CLIENT, h.last(CLIENT), pick.callback_data)
+    assert "Выберите удобное время" in h.last_text(CLIENT)
+
+    await h.click(CLIENT, "Назад")                       # время -> календарь
+    assert "Выберите дату" in h.last_text(CLIENT)
+
+    await h.press(CLIENT, h.last(CLIENT), pick.callback_data)
+    await h.click_data(CLIENT, "time")
+    assert "Выберите услугу" in h.last_text(CLIENT)
+    await h.click(CLIENT, "Назад")                       # услуга -> время
+    assert "Выберите удобное время" in h.last_text(CLIENT)
+    await h.click_data(CLIENT, "time")                   # и можно идти дальше
+    assert "Выберите услугу" in h.last_text(CLIENT)
+
+
+async def test_admin_calendar_has_back_button(h):
+    await h.send(ADMIN, BTN_ADMIN)
+    await h.click(ADMIN, "Расписание")
+    await h.click(ADMIN, "Расписание на дату")
+    labels = [b.text for b in h.inline_buttons(h.last(ADMIN))]
+    assert "⬅️ Назад" in labels
+    await h.click(ADMIN, "Назад")
+    assert "Админ-панель" in h.last_text(ADMIN)
