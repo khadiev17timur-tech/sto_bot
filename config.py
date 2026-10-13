@@ -28,7 +28,7 @@ if not ADMIN_ID:
     raise RuntimeError("Не задан ADMIN_ID (в .env или в переменных окружения хостинга)")
 
 # --- Информация о СТО ---
-STO_NAME: str = os.getenv("STO_NAME", "Автосервис")
+STO_NAME: str = os.getenv("STO_NAME", "Автосервис TORQUE")
 STO_ADDRESS: str = os.getenv("STO_ADDRESS", "")
 STO_PHONE: str = os.getenv("STO_PHONE", "")
 STO_WORKING_HOURS: str = os.getenv(
